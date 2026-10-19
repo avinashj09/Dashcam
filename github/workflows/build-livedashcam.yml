@@ -1,6 +1,5 @@
 
 name: Build LiveDashcam APK
-
 on:
   workflow_dispatch:
   push:
