@@ -25,18 +25,60 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -eu
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ERROR: Android SDK path not found"
+            exit 1
+          fi
+
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" \
+            -type f -name sdkmanager -print -quit)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -fL --retry 3 \
+            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
+            -o gradle.zip
+          unzip -q gradle.zip
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Extract source ZIP
+        shell: bash
         run: |
-          set -e
+          set -eu
+
+          if [ ! -f LiveDashcam-Final-Source.zip ]; then
+            echo "ERROR: LiveDashcam-Final-Source.zip not found in repository root"
+            exit 1
+          fi
+
           mkdir -p extracted
           unzip -q LiveDashcam-Final-Source.zip -d extracted
 
           PROJECT_DIR=$(find extracted \
-            -name settings.gradle.kts \
-            -type f -print -quit | xargs -r dirname)
+            -type f -name settings.gradle.kts \
+            -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: settings.gradle.kts not found"
@@ -46,24 +88,10 @@ jobs:
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Project found: $PROJECT_DIR"
 
-      - name: Check Gradle wrapper
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          if [ ! -f gradlew ]; then
-            echo "ERROR: gradlew is missing from the source ZIP"
-            exit 1
-          fi
-
-          if [ ! -f gradle/wrapper/gradle-wrapper.properties ]; then
-            echo "ERROR: Gradle wrapper files are incomplete"
-            exit 1
-          fi
-
-          chmod +x gradlew
-
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          gradle --no-daemon assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
