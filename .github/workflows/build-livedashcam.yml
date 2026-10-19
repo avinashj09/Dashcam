@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "LiveDashcam-Final-Source.zip"
+      - "LiveDashcam-Final-Source-Kotlin-Fix.zip"
       - ".github/workflows/build-livedashcam.yml"
 
 permissions:
@@ -28,15 +28,9 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
-          set -eu
+          set -euo pipefail
 
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-
-          if [ -z "$SDK_ROOT" ]; then
-            echo "ERROR: Android SDK path not found"
-            exit 1
-          fi
-
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" \
             -type f -name sdkmanager -print -quit)
 
@@ -55,26 +49,30 @@ jobs:
       - name: Install Gradle 8.9
         shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           cd "$RUNNER_TEMP"
+
           curl -fL --retry 3 \
             https://services.gradle.org/distributions/gradle-8.9-bin.zip \
             -o gradle.zip
+
           unzip -q gradle.zip
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Extract source ZIP
         shell: bash
         run: |
-          set -eu
+          set -euo pipefail
 
-          if [ ! -f LiveDashcam-Final-Source.zip ]; then
-            echo "ERROR: LiveDashcam-Final-Source.zip not found in repository root"
+          ZIP_FILE="LiveDashcam-Final-Source-Kotlin-Fix.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found in repository root"
             exit 1
           fi
 
           mkdir -p extracted
-          unzip -q LiveDashcam-Final-Source.zip -d extracted
+          unzip -q "$ZIP_FILE" -d extracted
 
           PROJECT_DIR=$(find extracted \
             -type f -name settings.gradle.kts \
@@ -82,6 +80,11 @@ jobs:
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: settings.gradle.kts not found"
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: app/build.gradle.kts not found"
             exit 1
           fi
 
