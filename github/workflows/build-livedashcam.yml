@@ -1,0 +1,83 @@
+
+name: Build LiveDashcam APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "LiveDashcam-Final-Source.zip"
+      - ".github/workflows/build-livedashcam.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract LiveDashcam source
+        run: |
+          set -e
+          ZIP_FILE="LiveDashcam-Final-Source.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE not found in repository root."
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          PROJECT_DIR=$(find extracted -name settings.gradle.kts \
+            -type f -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle.kts not found."
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
+
+      - name: Verify Android project
+        run: |
+          set -e
+          test -f "$PROJECT_DIR/settings.gradle.kts"
+          test -f "$PROJECT_DIR/app/build.gradle.kts"
+          find "$PROJECT_DIR" -maxdepth 2 \
+            -name gradlew -type f -print
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -e
+
+          if [ ! -f gradlew ]; then
+            echo "ERROR: Gradle wrapper missing."
+            echo "Add gradlew and gradle/wrapper files to the source ZIP."
+            exit 1
+          fi
+
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveDashcam-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
