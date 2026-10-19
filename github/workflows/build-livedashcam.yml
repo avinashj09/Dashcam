@@ -25,56 +25,47 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Extract LiveDashcam source
+      - name: Extract source ZIP
         run: |
           set -e
-          ZIP_FILE="LiveDashcam-Final-Source.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: $ZIP_FILE not found in repository root."
-            exit 1
-          fi
-
           mkdir -p extracted
-          unzip -q "$ZIP_FILE" -d extracted
+          unzip -q LiveDashcam-Final-Source.zip -d extracted
 
-          PROJECT_DIR=$(find extracted -name settings.gradle.kts \
+          PROJECT_DIR=$(find extracted \
+            -name settings.gradle.kts \
             -type f -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle.kts not found."
+            echo "ERROR: settings.gradle.kts not found"
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Found project: $PROJECT_DIR"
+          echo "Project found: $PROJECT_DIR"
 
-      - name: Verify Android project
-        run: |
-          set -e
-          test -f "$PROJECT_DIR/settings.gradle.kts"
-          test -f "$PROJECT_DIR/app/build.gradle.kts"
-          find "$PROJECT_DIR" -maxdepth 2 \
-            -name gradlew -type f -print
-
-      - name: Build debug APK
+      - name: Check Gradle wrapper
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          set -e
-
           if [ ! -f gradlew ]; then
-            echo "ERROR: Gradle wrapper missing."
-            echo "Add gradlew and gradle/wrapper files to the source ZIP."
+            echo "ERROR: gradlew is missing from the source ZIP"
+            exit 1
+          fi
+
+          if [ ! -f gradle/wrapper/gradle-wrapper.properties ]; then
+            echo "ERROR: Gradle wrapper files are incomplete"
             exit 1
           fi
 
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: LiveDashcam-debug-apk
